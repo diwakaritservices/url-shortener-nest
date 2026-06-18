@@ -78,6 +78,7 @@ Update `.env.docker` with production values:
 WEB_PORT=8080
 PUBLIC_BASE_URL=https://your-domain.com
 FRONTEND_ORIGINS=https://your-domain.com
+SHORT_URL_CACHE_TTL_SECONDS=43200
 JWT_SECRET=replace-with-a-long-random-secret
 JWT_EXPIRES_IN=1d
 TURNSTILE_SITE_KEY=your-cloudflare-turnstile-site-key
@@ -98,6 +99,7 @@ In this setup:
 - `/`, `/login`, `/register`, and `/my-links` serve the React app.
 - Other root paths are proxied to the backend for short-link redirects.
 - MongoDB and Redis are internal Compose services.
+- Redis caches public short-link redirect destinations as `short-url:<shortId>` values containing only the `fullUrl`.
 
 ## GitHub Container Registry
 
@@ -150,4 +152,5 @@ docker compose --env-file .env.docker.example ps
 - Use a long, random `JWT_SECRET`.
 - The compound unique MongoDB index on `{ ownerId, fullUrl }` requires existing duplicate data to be cleaned before deployment.
 - The current duplicate URL check is an exact stored string match. URL canonicalization is not applied.
-- Redis is available in the Compose stack, but the current throttling configuration uses Nest's in-memory throttler storage.
+- Public short-link redirects use Redis as a cache and fall back to MongoDB if Redis is unavailable.
+- Short-link cache entries use sliding expiration. The default TTL is 12 hours of inactivity.

@@ -3,8 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { RedisService } from '../redis/redis.service';
 import { CreateUrlDto } from './dto/create-url.dto';
 import { ShortUrl, ShortUrlDocument } from './schemas/short-url.schema';
 import {
@@ -30,13 +32,21 @@ export class UrlsService {
   private readonly shortIdAlphabet =
     '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
   private readonly generatedShortIdLength = 10;
+  private readonly shortUrlCacheKeyPrefix = 'short-url';
+  private readonly shortUrlCacheTtlSeconds: number;
   private shortIdGenerator?: ShortIdGenerator;
   private shortIdGeneratorPromise?: Promise<ShortIdGenerator>;
 
   constructor(
     @InjectModel(ShortUrl.name)
     private readonly shortUrlModel: Model<ShortUrlDocument>,
-  ) {}
+    private readonly redisService: RedisService,
+    configService: ConfigService,
+  ) {
+    this.shortUrlCacheTtlSeconds =
+      Number(configService.get<string>('SHORT_URL_CACHE_TTL_SECONDS')) ||
+      43_200;
+  }
 
   async create(
     ownerId: string,
@@ -114,6 +124,8 @@ export class UrlsService {
       throw new NotFoundException('Short URL not found');
     }
 
+    await this.deleteCachedShortUrl(shortId);
+
     return this.toResponse(shortUrl);
   }
 
@@ -139,6 +151,8 @@ export class UrlsService {
     if (!shortUrl) {
       throw new NotFoundException('Short URL not found');
     }
+
+    await this.deleteCachedShortUrl(shortId);
 
     return this.toResponse(shortUrl);
   }
@@ -166,10 +180,27 @@ export class UrlsService {
       throw new NotFoundException('Short URL not found');
     }
 
+    await this.deleteCachedShortUrl(shortId);
+
     return this.toResponse(shortUrl);
   }
 
   async resolve(shortId: string): Promise<ShortUrlResponse> {
+    const cacheKey = this.buildShortUrlCacheKey(shortId);
+    const cachedFullUrl = await this.redisService.get(cacheKey);
+
+    if (cachedFullUrl) {
+      await this.redisService.expire(cacheKey, this.shortUrlCacheTtlSeconds);
+
+      return {
+        id: shortId,
+        fullUrl: cachedFullUrl,
+        shortId,
+        isArchived: false,
+        archivedAt: null,
+      };
+    }
+
     const shortUrl = await this.shortUrlModel
       .findOne({ shortId, archivedAt: null })
       .exec();
@@ -177,6 +208,12 @@ export class UrlsService {
     if (!shortUrl) {
       throw new NotFoundException('Short URL not found');
     }
+
+    await this.redisService.setEx(
+      cacheKey,
+      this.shortUrlCacheTtlSeconds,
+      shortUrl.fullUrl,
+    );
 
     return this.toResponse(shortUrl);
   }
@@ -258,5 +295,13 @@ export class UrlsService {
 
   private isDuplicateFullUrlForOwnerError(error: DuplicateKeyError): boolean {
     return Boolean(error.keyPattern?.ownerId && error.keyPattern?.fullUrl);
+  }
+
+  private buildShortUrlCacheKey(shortId: string): string {
+    return `${this.shortUrlCacheKeyPrefix}:${shortId}`;
+  }
+
+  private async deleteCachedShortUrl(shortId: string): Promise<void> {
+    await this.redisService.del(this.buildShortUrlCacheKey(shortId));
   }
 }

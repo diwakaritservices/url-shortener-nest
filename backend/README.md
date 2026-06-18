@@ -32,6 +32,8 @@ Create `backend/.env` for local development:
 ```env
 NODE_ENV=development
 MONGODB_URI=mongodb://localhost:27017/url-shortener
+REDIS_URL=redis://localhost:8765
+SHORT_URL_CACHE_TTL_SECONDS=43200
 JWT_SECRET=local-development-secret
 JWT_EXPIRES_IN=1d
 FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
@@ -48,17 +50,19 @@ The API listens on `http://localhost:3000` by default.
 
 ## Environment Variables
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `NODE_ENV` | No | Use `production` for production-only checks. |
-| `PORT` | No | API port. Defaults to `3000`. |
-| `MONGODB_URI` | Production | MongoDB connection URI. Required when `NODE_ENV=production`. |
-| `JWT_SECRET` | Production | Secret used to sign access tokens. Required when `NODE_ENV=production`. |
-| `JWT_EXPIRES_IN` | No | JWT lifetime. Defaults to `1d`. |
-| `FRONTEND_ORIGINS` | Production | Comma-separated allowed CORS origins. |
-| `TURNSTILE_SECRET_KEY` | Production | Cloudflare Turnstile secret key. Required when `NODE_ENV=production`. |
-| `TURNSTILE_SKIP_VERIFY` | No | Set to `true` only outside production to bypass Turnstile verification. |
-| `TRUST_PROXY` | No | Express trust proxy setting. Use `1` behind the frontend Nginx container. |
+| Name                          | Required   | Description                                                                                        |
+| ----------------------------- | ---------- | -------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                    | No         | Use `production` for production-only checks.                                                       |
+| `PORT`                        | No         | API port. Defaults to `3000`.                                                                      |
+| `MONGODB_URI`                 | Production | MongoDB connection URI. Required when `NODE_ENV=production`.                                       |
+| `REDIS_URL`                   | No         | Redis connection URI for public short-link redirect caching. Defaults to `redis://localhost:8765`. |
+| `SHORT_URL_CACHE_TTL_SECONDS` | No         | Sliding TTL for cached short-link redirects. Defaults to `43200` seconds.                          |
+| `JWT_SECRET`                  | Production | Secret used to sign access tokens. Required when `NODE_ENV=production`.                            |
+| `JWT_EXPIRES_IN`              | No         | JWT lifetime. Defaults to `1d`.                                                                    |
+| `FRONTEND_ORIGINS`            | Production | Comma-separated allowed CORS origins.                                                              |
+| `TURNSTILE_SECRET_KEY`        | Production | Cloudflare Turnstile secret key. Required when `NODE_ENV=production`.                              |
+| `TURNSTILE_SKIP_VERIFY`       | No         | Set to `true` only outside production to bypass Turnstile verification.                            |
+| `TRUST_PROXY`                 | No         | Express trust proxy setting. Use `1` behind the frontend Nginx container.                          |
 
 ## API Overview
 
@@ -83,6 +87,8 @@ Public redirect:
 - `GET /:shortId`
 
 The public redirect returns a `302` by default. If the request includes `Accept: application/json` or `Content-Type: application/json`, it returns JSON containing the destination URL instead.
+
+Public redirect lookups use Redis as a cache. Cache keys are `short-url:<shortId>`, values contain only the destination `fullUrl`, and cache hits refresh the TTL back to `SHORT_URL_CACHE_TTL_SECONDS`.
 
 ## URL Creation Rules
 

@@ -6,13 +6,7 @@ services:
       - mongodb-data:/data/db
     healthcheck:
       test:
-        [
-          "CMD",
-          "mongosh",
-          "--quiet",
-          "--eval",
-          "db.adminCommand('ping').ok",
-        ]
+        ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -21,6 +15,8 @@ services:
   redis:
     image: redis:latest
     restart: unless-stopped
+    ports:
+      - 8765:6379
     volumes:
       - redis-data:/data
     healthcheck:
@@ -37,6 +33,8 @@ services:
       NODE_ENV: production
       PORT: 3000
       MONGODB_URI: mongodb://mongodb:27017/url-shortener
+      REDIS_URL: redis://redis:6379
+      SHORT_URL_CACHE_TTL_SECONDS: ${SHORT_URL_CACHE_TTL_SECONDS:-43200}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:?TURNSTILE_SECRET_KEY is required}

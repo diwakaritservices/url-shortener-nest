@@ -1,7 +1,9 @@
 import { NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
+import { RedisService } from '../redis/redis.service';
 import { ShortUrl } from './schemas/short-url.schema';
 import { createShortIdGenerator } from './short-id-generator';
 import { UrlsService } from './urls.service';
@@ -26,14 +28,30 @@ describe('UrlsService', () => {
   let model: {
     create: jest.Mock;
     exists: jest.Mock;
+    findOne: jest.Mock;
+    findOneAndDelete: jest.Mock;
     findOneAndUpdate: jest.Mock;
+  };
+  let redisService: {
+    del: jest.Mock;
+    expire: jest.Mock;
+    get: jest.Mock;
+    setEx: jest.Mock;
   };
 
   beforeEach(async () => {
     model = {
       create: jest.fn(),
       exists: jest.fn(),
+      findOne: jest.fn(),
+      findOneAndDelete: jest.fn(),
       findOneAndUpdate: jest.fn(),
+    };
+    redisService = {
+      del: jest.fn().mockResolvedValue(undefined),
+      expire: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue(null),
+      setEx: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -42,6 +60,18 @@ describe('UrlsService', () => {
         {
           provide: getModelToken(ShortUrl.name),
           useValue: model,
+        },
+        {
+          provide: RedisService,
+          useValue: redisService,
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) =>
+              key === 'SHORT_URL_CACHE_TTL_SECONDS' ? '43200' : undefined,
+            ),
+          },
         },
       ],
     }).compile();
@@ -103,6 +133,7 @@ describe('UrlsService', () => {
       { returnDocument: 'after' },
     );
     expect(update.$set.archivedAt).toBeInstanceOf(Date);
+    expect(redisService.del).toHaveBeenCalledWith('short-url:clear-river-123');
     expect(result).toEqual({
       id: shortUrl._id.toString(),
       fullUrl: shortUrl.fullUrl,
@@ -120,5 +151,60 @@ describe('UrlsService', () => {
     await expect(service.archiveForUser(ownerId, shortId)).rejects.toThrow(
       NotFoundException,
     );
+  });
+
+  it('resolves a cached short URL and refreshes its inactivity TTL', async () => {
+    redisService.get.mockResolvedValue('https://cached.example.com');
+
+    const result = await service.resolve(shortId);
+
+    expect(model.findOne).not.toHaveBeenCalled();
+    expect(redisService.get).toHaveBeenCalledWith('short-url:clear-river-123');
+    expect(redisService.expire).toHaveBeenCalledWith(
+      'short-url:clear-river-123',
+      43200,
+    );
+    expect(result).toEqual({
+      id: shortId,
+      fullUrl: 'https://cached.example.com',
+      shortId,
+      isArchived: false,
+      archivedAt: null,
+    });
+  });
+
+  it('caches only the full URL after resolving from MongoDB', async () => {
+    model.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ ...shortUrl, archivedAt: null }),
+    });
+
+    const result = await service.resolve(shortId);
+
+    expect(model.findOne).toHaveBeenCalledWith({
+      shortId,
+      archivedAt: null,
+    });
+    expect(redisService.setEx).toHaveBeenCalledWith(
+      'short-url:clear-river-123',
+      43200,
+      'https://example.com',
+    );
+    expect(result).toEqual({
+      id: shortUrl._id.toString(),
+      fullUrl: 'https://example.com',
+      shortId,
+      isArchived: false,
+      archivedAt: null,
+    });
+  });
+
+  it('deletes the cached short URL when removing a URL', async () => {
+    model.findOneAndDelete.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(shortUrl),
+    });
+
+    await service.removeForUser(ownerId, shortId);
+
+    expect(redisService.del).toHaveBeenCalledWith('short-url:clear-river-123');
   });
 });
