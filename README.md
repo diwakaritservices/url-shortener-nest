@@ -66,6 +66,8 @@ Default local URLs:
 
 ## Hosted Docker Stack
 
+For local image builds, use `docker-compose.yml`.
+
 Copy the deployment env template:
 
 ```bash
@@ -79,6 +81,8 @@ WEB_PORT=8080
 PUBLIC_BASE_URL=https://your-domain.com
 FRONTEND_ORIGINS=https://your-domain.com
 SHORT_URL_CACHE_TTL_SECONDS=43200
+BACKEND_IMAGE=ghcr.io/abhidiwakar/url-shortener-nest-backend:latest
+FRONTEND_IMAGE=ghcr.io/abhidiwakar/url-shortener-nest-frontend:latest
 JWT_SECRET=replace-with-a-long-random-secret
 JWT_EXPIRES_IN=1d
 TURNSTILE_SITE_KEY=your-cloudflare-turnstile-site-key
@@ -90,6 +94,20 @@ Run the stack:
 
 ```bash
 docker compose --env-file .env.docker up -d --build
+```
+
+For production servers using GHCR images, use `docker-compose.prod.yml` instead:
+
+```bash
+docker compose --env-file .env.docker -f docker-compose.prod.yml pull
+docker compose --env-file .env.docker -f docker-compose.prod.yml up -d
+```
+
+To pin a specific image published by GitHub Actions, set image tags in `.env.docker`:
+
+```env
+BACKEND_IMAGE=ghcr.io/abhidiwakar/url-shortener-nest-backend:sha-956438e
+FRONTEND_IMAGE=ghcr.io/abhidiwakar/url-shortener-nest-frontend:sha-956438e
 ```
 
 In this setup:
@@ -143,6 +161,7 @@ Docker:
 docker compose --env-file .env.docker.example build backend frontend
 docker compose --env-file .env.docker.example up -d
 docker compose --env-file .env.docker.example ps
+docker compose --env-file .env.docker.example -f docker-compose.prod.yml config
 ```
 
 ## Production Notes
