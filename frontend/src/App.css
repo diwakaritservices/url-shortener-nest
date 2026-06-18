@@ -1,0 +1,95 @@
+.auth-shell {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background:
+    linear-gradient(135deg, rgba(23, 105, 170, 0.08), transparent 42%),
+    linear-gradient(315deg, rgba(46, 125, 50, 0.08), transparent 34%),
+    #f6f8fb;
+}
+
+.auth-panel {
+  width: min(100%, 460px);
+  padding: 32px;
+  border: 1px solid #dce3ec;
+  border-radius: 8px;
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: #1769aa;
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+
+.app-shell {
+  min-height: 100svh;
+  background: #f6f8fb;
+}
+
+.toolbar {
+  min-height: 72px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #dce3ec;
+}
+
+.content {
+  padding-block: 32px;
+}
+
+.dashboard-header,
+.links-panel {
+  border: 1px solid #dce3ec;
+  border-radius: 8px;
+}
+
+.dashboard-header {
+  padding: 24px;
+}
+
+.links-panel {
+  overflow: hidden;
+}
+
+.state-panel {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px;
+  text-align: center;
+}
+
+.destination-cell {
+  max-width: 460px;
+}
+
+.turnstile-box {
+  min-height: 65px;
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 700px) {
+  .auth-panel {
+    padding: 24px;
+  }
+
+  .content {
+    padding-block: 20px;
+  }
+
+  .dashboard-header {
+    padding: 20px;
+  }
+}
