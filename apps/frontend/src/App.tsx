@@ -58,6 +58,7 @@ import type { ShortLink } from './api';
 import { clearAuth, getToken, getUser, saveAuth } from './auth';
 import './App.css';
 
+const PRODUCT_NAME = 'Linkable';
 const TURNSTILE_SCRIPT_URL =
   'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
@@ -289,7 +290,7 @@ function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
                 <LinkIcon fontSize="small" />
               </Box>
               <Typography variant="overline" color="text.secondary">
-                Link desk
+                {PRODUCT_NAME}
               </Typography>
             </Stack>
             <Typography variant="h4">
@@ -535,7 +536,7 @@ function MyLinksPage() {
             </Box>
             <Box>
               <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                Link desk
+                {PRODUCT_NAME}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {user?.email}
@@ -761,6 +762,37 @@ function MyLinksPage() {
   );
 }
 
+function NotFoundPage() {
+  const isAuthenticated = Boolean(getToken());
+
+  return (
+    <Box className="auth-shell">
+      <Paper className="auth-panel" elevation={0}>
+        <Stack spacing={3} sx={{ alignItems: 'center', textAlign: 'center' }}>
+          <Box className="brand-mark">
+            <LinkIcon fontSize="small" />
+          </Box>
+          <Typography variant="overline" color="text.secondary">
+            {PRODUCT_NAME}
+          </Typography>
+          <Typography variant="h4">Link not found</Typography>
+          <Typography color="text.secondary">
+            This short link does not exist, has been removed, or is no longer
+            active.
+          </Typography>
+          <Button
+            component={RouterLink}
+            to={isAuthenticated ? '/my-links' : '/login'}
+            variant="contained"
+          >
+            {isAuthenticated ? 'Back to my links' : 'Go to login'}
+          </Button>
+        </Stack>
+      </Paper>
+    </Box>
+  );
+}
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
@@ -791,7 +823,8 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="/not-found" element={<NotFoundPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </ThemeProvider>
   );

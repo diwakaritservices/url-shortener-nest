@@ -1,6 +1,6 @@
 # Frontend
 
-React application for registering, logging in, creating short links, copying links, and managing active or archived links.
+React application for Linkable — register, log in, create short links, copy links, and manage active or archived links.
 
 ## Stack
 
@@ -101,7 +101,7 @@ The frontend Docker image builds the Vite app and serves it with Nginx.
 Build from the repository root:
 
 ```bash
-docker compose --env-file .env.docker.example build frontend
+docker compose --env-file .env.docker.example -f docker-compose.dev.yml build frontend
 ```
 
 In the hosted stack:

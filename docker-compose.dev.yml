@@ -2,6 +2,8 @@ services:
   mongodb:
     image: mongo:latest
     restart: unless-stopped
+    ports:
+      - "27017:27017"
     volumes:
       - mongodb-data:/data/db
     healthcheck:
@@ -16,7 +18,7 @@ services:
     image: redis:latest
     restart: unless-stopped
     ports:
-      - 8765:6379
+      - "8765:6379"
     volumes:
       - redis-data:/data
     healthcheck:

@@ -1,4 +1,11 @@
-import { Controller, Get, Param, Req, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Req,
+  Res,
+} from '@nestjs/common';
 import type { RedirectJsonResponse } from '@url-shortener/shared';
 import type { Request, Response } from 'express';
 import { UrlsService } from './urls.service';
@@ -13,7 +20,26 @@ export class RedirectController {
     @Req() request: Request,
     @Res() response: Response,
   ): Promise<void> {
-    const shortUrl = await this.urlsService.resolve(shortId);
+    let shortUrl;
+
+    try {
+      shortUrl = await this.urlsService.resolve(shortId);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        if (this.prefersJson(request)) {
+          response.status(404).json({
+            statusCode: 404,
+            message: 'Short URL not found',
+          });
+          return;
+        }
+
+        response.redirect(302, '/not-found');
+        return;
+      }
+
+      throw error;
+    }
 
     if (this.prefersJson(request)) {
       const payload: RedirectJsonResponse = {

@@ -1,6 +1,6 @@
-# URL Shortener
+# Linkable
 
-Full-stack URL shortener with email/password auth, Cloudflare Turnstile verification, user-owned links, archive support, duplicate URL detection, and a Docker/Nginx hosting setup.
+Linkable is a full-stack URL shortener with email/password auth, Cloudflare Turnstile verification, user-owned links, archive support, duplicate URL detection, and a Docker/Nginx hosting setup.
 
 ## Stack
 
@@ -20,7 +20,8 @@ Full-stack URL shortener with email/password auth, Cloudflare Turnstile verifica
 |   `-- frontend/            # React app served by Nginx in Docker
 +-- packages/
 |   `-- shared/              # Shared API types (@url-shortener/shared)
-+-- docker-compose.yml       # Hosted stack: frontend, backend, MongoDB, Redis
++-- docker-compose.dev.yml   # Local stack: frontend, backend, MongoDB, Redis
++-- docker-compose.prod.yml  # Production stack using GHCR images
 +-- turbo.json               # Turborepo task pipeline
 +-- .env.docker.example      # Deployment env template
 `-- .github/workflows/       # Docker image publishing workflow
@@ -42,11 +43,17 @@ Full-stack URL shortener with email/password auth, Cloudflare Turnstile verifica
 
 ## Local Development
 
-Start MongoDB and Redis. The backend-local compose file exposes MongoDB on `27017` and Redis on `8765`.
+Start MongoDB and Redis from the repo root. The dev compose file exposes MongoDB on `27017` and Redis on `8765` for host-based app development.
 
 ```bash
-cd apps/backend
-docker compose up -d
+docker compose -f docker-compose.dev.yml up -d mongodb redis
+```
+
+Copy local env templates if you have not already:
+
+```bash
+cp apps/backend/.env.example apps/backend/.env
+cp apps/frontend/.env.example apps/frontend/.env
 ```
 
 Install dependencies from the repo root:
@@ -73,10 +80,11 @@ Default local URLs:
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:3000`
 - MongoDB: `mongodb://localhost:27017/url-shortener`
+- Redis: `redis://localhost:8765`
 
-## Hosted Docker Stack
+## Local Docker Stack
 
-For local image builds, use `docker-compose.yml`.
+For local image builds of the full stack, use `docker-compose.dev.yml`.
 
 Copy the deployment env template:
 
@@ -103,7 +111,7 @@ TRUST_PROXY=1
 Run the stack:
 
 ```bash
-docker compose --env-file .env.docker up -d --build
+docker compose --env-file .env.docker -f docker-compose.dev.yml up -d --build
 ```
 
 For production servers using GHCR images, use `docker-compose.prod.yml` instead:
@@ -174,9 +182,9 @@ npm run build --workspace=@url-shortener/frontend
 Docker:
 
 ```bash
-docker compose --env-file .env.docker.example build backend frontend
-docker compose --env-file .env.docker.example up -d
-docker compose --env-file .env.docker.example ps
+docker compose --env-file .env.docker.example -f docker-compose.dev.yml build backend frontend
+docker compose --env-file .env.docker.example -f docker-compose.dev.yml up -d
+docker compose --env-file .env.docker.example -f docker-compose.dev.yml ps
 docker compose --env-file .env.docker.example -f docker-compose.prod.yml config
 ```
 

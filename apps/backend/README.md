@@ -1,6 +1,6 @@
 # Backend
 
-NestJS API for the URL shortener. It handles authentication, Turnstile verification, user-owned short links, duplicate URL detection, redirects, and archive state.
+NestJS API for Linkable. It handles authentication, Turnstile verification, user-owned short links, duplicate URL detection, redirects, and archive state.
 
 ## Stack
 
@@ -21,13 +21,17 @@ Install dependencies:
 npm install
 ```
 
-Start local MongoDB and Redis from this directory:
+Start local MongoDB and Redis from the repo root:
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose.dev.yml up -d mongodb redis
 ```
 
-Create `backend/.env` for local development:
+Create `apps/backend/.env` for local development:
+
+```bash
+cp apps/backend/.env.example apps/backend/.env
+```
 
 ```env
 NODE_ENV=development
@@ -38,12 +42,13 @@ JWT_SECRET=local-development-secret
 JWT_EXPIRES_IN=1d
 FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+TRUST_PROXY=loopback
 ```
 
 Run the API:
 
 ```bash
-npm run start:dev
+npm run dev --workspace=@url-shortener/backend
 ```
 
 The API listens on `http://localhost:3000` by default.
@@ -139,7 +144,7 @@ The e2e suite expects MongoDB on `localhost:27017`. It creates an isolated test 
 Build the backend image from the repository root:
 
 ```bash
-docker compose --env-file .env.docker.example build backend
+docker compose --env-file .env.docker.example -f docker-compose.dev.yml build backend
 ```
 
 The runtime image starts:
