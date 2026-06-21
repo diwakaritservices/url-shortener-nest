@@ -14,8 +14,7 @@ import '@scalar/api-reference-react/style.css';
 import { Link as RouterLink } from 'react-router-dom';
 import { getToken } from '../auth';
 import { getOpenApiSpecUrl } from '../lib/developers';
-
-const PRODUCT_NAME = 'Linkable';
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from '../constants/product';
 
 export function DevelopersPage() {
   const isAuthenticated = Boolean(getToken());
@@ -33,7 +32,7 @@ export function DevelopersPage() {
                 {PRODUCT_NAME}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Integration API
+                {PRODUCT_TAGLINE}
               </Typography>
             </Box>
           </Stack>

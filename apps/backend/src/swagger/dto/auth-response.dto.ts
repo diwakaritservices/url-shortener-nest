@@ -6,6 +6,9 @@ export class AuthenticatedUserDto {
 
   @ApiProperty({ example: 'user@example.com' })
   email: string;
+
+  @ApiProperty({ example: 'Alex Morgan', nullable: true })
+  name: string | null;
 }
 
 export class AuthResponseDto {

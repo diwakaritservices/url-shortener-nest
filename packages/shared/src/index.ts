@@ -2,6 +2,7 @@ export type {
   AuthenticatedUser,
   AuthCredentials,
   AuthResponse,
+  UpdateProfileRequest,
 } from './auth';
 export type {
   ApiKeySummary,
