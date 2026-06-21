@@ -18,11 +18,16 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/backend/node_modules ./apps/backend/node_modules
 RUN ./node_modules/.bin/turbo run build --filter=@url-shortener/backend
 
+FROM base AS prod-deps
+ENV NODE_ENV=production
+COPY --from=prepare /app/out/json/ .
+RUN npm ci --omit=dev --include=optional
+
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
-COPY --from=build /app/package.json /app/package-lock.json ./
-COPY --from=build /app/node_modules ./node_modules
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/apps/backend/node_modules ./apps/backend/node_modules
 COPY --from=build /app/apps/backend/package.json ./apps/backend/package.json
 COPY --from=build /app/apps/backend/dist ./apps/backend/dist
 WORKDIR /app/apps/backend
