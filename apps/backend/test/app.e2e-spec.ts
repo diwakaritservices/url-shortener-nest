@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import cookieParser from 'cookie-parser';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import request from 'supertest';
@@ -7,10 +9,14 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 
 interface AuthResponseBody {
-  accessToken: string;
-  user: {
+  accessToken?: string;
+  mfaRequired?: boolean;
+  mfaToken?: string;
+  user?: {
     id: string;
     email: string;
+    emailVerified?: boolean;
+    mfaEnabled?: boolean;
   };
 }
 
@@ -52,7 +58,12 @@ describe('AppController (e2e)', () => {
     previousMongoUri = process.env.MONGODB_URI;
     process.env.MONGODB_URI = `mongodb://localhost:27017/url-shortener-e2e-${process.pid}`;
     process.env.TURNSTILE_SKIP_VERIFY = 'true';
+    process.env.EMAIL_VERIFICATION_SKIP = 'true';
     process.env.PUBLIC_BASE_URL = 'https://moklay.test';
+    process.env.PASSWORD_RESET_FIXED_OTP = '123456';
+    process.env.MFA_FIXED_SECRET = 'JBSWY3DPEHPK3PXP';
+    process.env.MFA_FIXED_CODE = '123456';
+    process.env.SMTP_SKIP_SEND = 'true';
   });
 
   beforeEach(async () => {
@@ -60,7 +71,15 @@ describe('AppController (e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
+    app.disable('x-powered-by');
+    app.use(cookieParser());
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+      }),
+    );
     await app.init();
     mongoConnection = app.get<Connection>(getConnectionToken());
     await Promise.all(
@@ -77,7 +96,12 @@ describe('AppController (e2e)', () => {
 
   afterAll(() => {
     delete process.env.TURNSTILE_SKIP_VERIFY;
+    delete process.env.EMAIL_VERIFICATION_SKIP;
     delete process.env.PUBLIC_BASE_URL;
+    delete process.env.PASSWORD_RESET_FIXED_OTP;
+    delete process.env.MFA_FIXED_SECRET;
+    delete process.env.MFA_FIXED_CODE;
+    delete process.env.SMTP_SKIP_SEND;
     if (previousMongoUri === undefined) {
       delete process.env.MONGODB_URI;
     } else {
@@ -90,7 +114,6 @@ describe('AppController (e2e)', () => {
       .get('/')
       .expect(200)
       .expect('Content-Type', /text\/html/)
-      .expect(/moklay — Managed URL shortener/)
       .expect(/Short links your team can trust and manage/)
       .expect(/class="brand-mark"/)
       .expect(/#1769aa/)
@@ -128,7 +151,7 @@ describe('AppController (e2e)', () => {
   });
 
   describe('auth', () => {
-    const password = 'secret123';
+    const password = 'secure-passphrase-1';
     let email: string;
 
     beforeEach(() => {
@@ -143,8 +166,89 @@ describe('AppController (e2e)', () => {
       const body = response.body as unknown as AuthResponseBody;
 
       expect(typeof body.accessToken).toBe('string');
-      expect(typeof body.user.id).toBe('string');
-      expect(body.user.email).toBe(email);
+      expect(typeof body.user?.id).toBe('string');
+      expect(body.user?.email).toBe(email);
+    });
+
+    it('resets password with an emailed code', async () => {
+      const newPassword = 'another-passphrase';
+
+      await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ email, password, turnstileToken })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email, turnstileToken })
+        .expect(204);
+
+      await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({
+          email,
+          otp: '123456',
+          newPassword,
+          turnstileToken,
+        })
+        .expect(204);
+
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password, turnstileToken })
+        .expect(401);
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: newPassword, turnstileToken })
+        .expect(200);
+      const body = response.body as unknown as AuthResponseBody;
+
+      expect(typeof body.accessToken).toBe('string');
+    });
+
+    it('requires MFA during login when enabled', async () => {
+      const signupResponse = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ email, password, turnstileToken })
+        .expect(201);
+      const signupBody = signupResponse.body as unknown as AuthResponseBody;
+      const accessToken = signupBody.accessToken ?? '';
+
+      await request(app.getHttpServer())
+        .post('/auth/mfa/setup')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const enableCode = '123456';
+
+      await request(app.getHttpServer())
+        .post('/auth/mfa/enable')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ code: enableCode })
+        .expect(200);
+
+      const loginResponse = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password, turnstileToken })
+        .expect(200);
+      const loginBody = loginResponse.body as unknown as AuthResponseBody;
+
+      expect(loginBody.mfaRequired).toBe(true);
+      expect(typeof loginBody.mfaToken).toBe('string');
+      expect(loginBody.accessToken).toBeUndefined();
+
+      const verifyResponse = await request(app.getHttpServer())
+        .post('/auth/mfa/verify-login')
+        .send({
+          mfaToken: loginBody.mfaToken,
+          code: '123456',
+        })
+        .expect(200);
+      const verifyBody = verifyResponse.body as unknown as AuthResponseBody;
+
+      expect(typeof verifyBody.accessToken).toBe('string');
+      expect(verifyBody.user?.mfaEnabled).toBe(true);
     });
 
     it('rejects duplicate signup emails', async () => {
@@ -184,7 +288,7 @@ describe('AppController (e2e)', () => {
 
       await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email, password: 'wrong-password', turnstileToken })
+        .send({ email, password: 'wrong-password-xx', turnstileToken })
         .expect(401);
     });
 
@@ -202,9 +306,11 @@ describe('AppController (e2e)', () => {
       const body = response.body as unknown as AuthResponseBody['user'];
 
       expect(body).toEqual({
-        id: signupBody.user.id,
+        id: signupBody.user?.id,
         email,
         name: null,
+        emailVerified: true,
+        mfaEnabled: false,
       });
     });
 
@@ -223,9 +329,11 @@ describe('AppController (e2e)', () => {
       const body = response.body as unknown as AuthResponseBody['user'];
 
       expect(body).toEqual({
-        id: signupBody.user.id,
+        id: signupBody.user?.id,
         email,
         name: 'Alex Morgan',
+        emailVerified: true,
+        mfaEnabled: false,
       });
     });
 
@@ -249,7 +357,7 @@ describe('AppController (e2e)', () => {
   });
 
   describe('urls', () => {
-    const password = 'secret123';
+    const password = 'secure-passphrase-1';
     let accessToken: string;
     let email: string;
 
@@ -292,7 +400,7 @@ describe('AppController (e2e)', () => {
   });
 
   describe('integrations', () => {
-    const password = 'secret123';
+    const password = 'secure-passphrase-1';
     let accessToken: string;
     let apiKey: string;
     let email: string;
@@ -375,6 +483,13 @@ describe('AppController (e2e)', () => {
 
       expect(activeLinks).toHaveLength(1);
       expect(activeLinks[0]?.isArchived).toBe(false);
+    });
+
+    it('rejects invalid archived filter values', async () => {
+      await request(app.getHttpServer())
+        .get('/v1/links?archived=invalid')
+        .set('X-API-Key', apiKey)
+        .expect(400);
     });
 
     it('rejects integration requests without an API key', async () => {

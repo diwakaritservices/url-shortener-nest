@@ -32,7 +32,7 @@ import { createApiKey, getApiKeys, revokeApiKey } from '../api';
 import { AuthenticatedShell } from '../components/AuthenticatedShell';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
-import { getToken } from '../auth';
+import { useAuth } from '../auth-context';
 import { PRODUCT_NAME } from '../constants/product';
 
 function formatTimestamp(value: string | null): string {
@@ -44,7 +44,7 @@ function formatTimestamp(value: string | null): string {
 }
 
 export function ApiKeysPage() {
-  const token = getToken();
+  const { isAuthenticated } = useAuth();
   const [apiKeys, setApiKeys] = useState<ApiKeySummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,18 +59,18 @@ export function ApiKeysPage() {
   const [isRevoking, setIsRevoking] = useState(false);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
     let mounted = true;
 
     async function loadApiKeys() {
-      if (!token) {
-        return;
-      }
-
       setIsLoading(true);
       setError(null);
 
       try {
-        const nextKeys = await getApiKeys(token);
+        const nextKeys = await getApiKeys();
 
         if (mounted) {
           setApiKeys(nextKeys);
@@ -95,7 +95,7 @@ export function ApiKeysPage() {
     return () => {
       mounted = false;
     };
-  }, [token]);
+  }, [isAuthenticated]);
 
   function openCreateDialog() {
     setKeyName('');
@@ -113,15 +113,11 @@ export function ApiKeysPage() {
   async function handleCreateKey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!token) {
-      return;
-    }
-
     setIsCreating(true);
     setError(null);
 
     try {
-      const response = await createApiKey(token, keyName);
+      const response = await createApiKey(keyName);
       setCreatedKey(response);
       setApiKeys((currentKeys) => [response, ...currentKeys]);
       setToast('API key created');
@@ -146,7 +142,7 @@ export function ApiKeysPage() {
   }
 
   async function handleRevokeKey() {
-    if (!token || !revokeTarget) {
+    if (!revokeTarget) {
       return;
     }
 
@@ -154,7 +150,7 @@ export function ApiKeysPage() {
     setError(null);
 
     try {
-      await revokeApiKey(token, revokeTarget.id);
+      await revokeApiKey(revokeTarget.id);
       setApiKeys((currentKeys) =>
         currentKeys.filter((key) => key.id !== revokeTarget.id),
       );

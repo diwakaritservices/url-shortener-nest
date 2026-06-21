@@ -14,6 +14,12 @@ import {
   PRODUCT_TAGLINE,
 } from './landing.constants';
 import { renderLandingShortenScript } from './landing-shorten.script';
+import {
+  renderNotFoundPage,
+  renderPrivacyPage,
+  renderSecurityTxt,
+  renderTermsPage,
+} from './legal-pages';
 
 export interface LandingPageContext {
   siteUrl: string;
@@ -275,6 +281,8 @@ export class LandingService {
       </div>
       <nav class="footer-nav" aria-label="Footer">
         <a href="${e(context.developersUrl)}">Developers</a>
+        <a href="${e(`${context.siteUrl}/privacy`)}">Privacy</a>
+        <a href="${e(`${context.siteUrl}/terms`)}">Terms</a>
         <a href="${e(context.registerUrl)}">Register</a>
         <a href="${e(context.loginUrl)}">Sign in</a>
       </nav>
@@ -302,7 +310,7 @@ Sitemap: ${siteUrl}/sitemap.xml
 
   renderSitemapXml(): string {
     const { siteUrl } = this.getContext();
-    const pages = ['', '/login', '/register', '/developers'];
+    const pages = ['', '/login', '/register', '/developers', '/privacy', '/terms'];
 
     const urls = pages
       .map(
@@ -319,6 +327,43 @@ Sitemap: ${siteUrl}/sitemap.xml
 ${urls}
 </urlset>
 `;
+  }
+
+  renderPrivacyPage(): string {
+    return renderPrivacyPage(this.getLegalContext());
+  }
+
+  renderTermsPage(): string {
+    return renderTermsPage(this.getLegalContext());
+  }
+
+  renderNotFoundPage(): string {
+    return renderNotFoundPage(this.getLegalContext());
+  }
+
+  renderSecurityTxt(): string {
+    const { siteUrl } = this.getContext();
+
+    return renderSecurityTxt(siteUrl, this.getContactEmail());
+  }
+
+  private getLegalContext() {
+    const { siteUrl, productName, year } = this.getContext();
+
+    return {
+      siteUrl,
+      productName,
+      contactEmail: this.getContactEmail(),
+      year,
+    };
+  }
+
+  private getContactEmail(): string {
+    return (
+      this.configService.get<string>('SECURITY_CONTACT_EMAIL') ??
+      this.configService.get<string>('SMTP_FROM') ??
+      'security@diwakarit.com'
+    );
   }
 
   sendBrandAsset(response: Response, filename: string): void {

@@ -48,16 +48,23 @@ import {
   getShortUrl,
   login,
   register,
+  resendVerificationEmail,
   unarchiveLink,
+  verifyEmail,
+  verifyMfaLogin,
 } from './api';
 import type { ShortLink } from './api';
-import { getToken, saveAuth } from './auth';
+import { saveUser } from './auth';
+import { useAuth } from './auth-context';
 import { AuthenticatedShell } from './components/AuthenticatedShell';
 import { BrandMark } from './components/BrandMark';
 import { EmptyState } from './components/EmptyState';
 import { PageHeader } from './components/PageHeader';
+import { TurnstileWidget } from './components/TurnstileWidget';
 import { ApiKeysPage } from './pages/ApiKeysPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { theme } from './theme';
 import { PRODUCT_NAME } from './constants/product';
 import {
@@ -74,119 +81,19 @@ const DevelopersPage = lazy(() =>
   })),
 );
 
-const TURNSTILE_SCRIPT_URL =
-  'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
-
-declare global {
-  interface Window {
-    turnstile?: {
-      render: (
-        container: HTMLElement,
-        options: {
-          sitekey: string;
-          theme?: 'light' | 'dark' | 'auto';
-          callback: (token: string) => void;
-          'expired-callback': () => void;
-          'error-callback': () => void;
-        },
-      ) => string;
-      remove: (widgetId: string) => void;
-      reset: (widgetId: string) => void;
-    };
-    turnstileScriptPromise?: Promise<void>;
-  }
-}
-
-function loadTurnstileScript(): Promise<void> {
-  if (window.turnstile) {
-    return Promise.resolve();
-  }
-
-  if (window.turnstileScriptPromise) {
-    return window.turnstileScriptPromise;
-  }
-
-  window.turnstileScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = TURNSTILE_SCRIPT_URL;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Unable to load Turnstile'));
-    document.head.appendChild(script);
-  });
-
-  return window.turnstileScriptPromise;
-}
-
-function TurnstileWidget({
-  onTokenChange,
-}: {
-  onTokenChange: (token: string | null) => void;
-}) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const widgetIdRef = useRef<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function renderWidget() {
-      if (!TURNSTILE_SITE_KEY) {
-        setError('Turnstile site key is not configured.');
-        return;
-      }
-
-      try {
-        await loadTurnstileScript();
-
-        if (cancelled || !containerRef.current || !window.turnstile) {
-          return;
-        }
-
-        widgetIdRef.current = window.turnstile.render(containerRef.current, {
-          sitekey: TURNSTILE_SITE_KEY,
-          theme: 'light',
-          callback: (token) => {
-            setError(null);
-            onTokenChange(token);
-          },
-          'expired-callback': () => {
-            onTokenChange(null);
-          },
-          'error-callback': () => {
-            onTokenChange(null);
-            setError('Verification failed. Please retry the challenge.');
-          },
-        });
-      } catch {
-        setError('Unable to load human verification.');
-      }
-    }
-
-    void renderWidget();
-
-    return () => {
-      cancelled = true;
-
-      if (widgetIdRef.current && window.turnstile) {
-        window.turnstile.remove(widgetIdRef.current);
-      }
-    };
-  }, [onTokenChange]);
-
-  return (
-    <Stack spacing={1}>
-      <Box className="turnstile-box" ref={containerRef} />
-      {error ? <Alert severity="error">{error}</Alert> : null}
-    </Stack>
-  );
-}
-
 function ProtectedRoute({ children }: { children: ReactElement }) {
   const location = useLocation();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
-  if (!getToken()) {
+  if (isLoading) {
+    return (
+      <Box className="state-panel" sx={{ minHeight: '100svh' }}>
+        <CircularProgress size={28} />
+      </Box>
+    );
+  }
+
+  if (!isAuthenticated) {
     return (
       <Navigate
         to={{ pathname: '/login', search: location.search }}
@@ -196,13 +103,52 @@ function ProtectedRoute({ children }: { children: ReactElement }) {
     );
   }
 
+  if (user && !user.emailVerified) {
+    return <Navigate to="/verify-email" replace state={{ from: location }} />;
+  }
+
+  return children;
+}
+
+function VerifyEmailRoute({ children }: { children: ReactElement }) {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return (
+      <Box className="state-panel" sx={{ minHeight: '100svh' }}>
+        <CircularProgress size={28} />
+      </Box>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user?.emailVerified) {
+    return <Navigate to="/my-links" replace />;
+  }
+
   return children;
 }
 
 function PublicOnlyRoute({ children }: { children: ReactElement }) {
   const location = useLocation();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
-  if (getToken()) {
+  if (isLoading) {
+    return (
+      <Box className="state-panel" sx={{ minHeight: '100svh' }}>
+        <CircularProgress size={28} />
+      </Box>
+    );
+  }
+
+  if (isAuthenticated) {
+    if (user && !user.emailVerified) {
+      return <Navigate to="/verify-email" replace />;
+    }
+
     return (
       <Navigate
         to={{ pathname: '/my-links', search: location.search }}
@@ -215,21 +161,62 @@ function PublicOnlyRoute({ children }: { children: ReactElement }) {
 }
 
 function RootRedirect() {
-  return <Navigate to={getToken() ? '/my-links' : '/login'} replace />;
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return (
+      <Box className="state-panel" sx={{ minHeight: '100svh' }}>
+        <CircularProgress size={28} />
+      </Box>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user && !user.emailVerified) {
+    return <Navigate to="/verify-email" replace />;
+  }
+
+  return <Navigate to="/my-links" replace />;
 }
 
 function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const { setUser } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isLogin = mode === 'login';
   const pendingUrl = normalizePendingUrl(searchParams.get(PENDING_URL_QUERY_PARAM) ?? '');
+  const passwordResetSuccess = Boolean(
+    (location.state as { passwordReset?: boolean } | null)?.passwordReset,
+  );
+
+  function completeSignIn(user: NonNullable<Awaited<ReturnType<typeof login>>['user']>) {
+    saveUser(user);
+    setUser(user);
+
+    if (!user.emailVerified) {
+      navigate('/verify-email', { replace: true });
+      return;
+    }
+
+    navigate(
+      pendingUrl
+        ? buildUrlWithPendingParam('/my-links', pendingUrl)
+        : '/my-links',
+      { replace: true },
+    );
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -240,13 +227,17 @@ function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
       const auth = isLogin
         ? await login(email, password, turnstileToken ?? '')
         : await register(email, password, turnstileToken ?? '');
-      saveAuth(auth);
-      navigate(
-        pendingUrl
-          ? buildUrlWithPendingParam('/my-links', pendingUrl)
-          : '/my-links',
-        { replace: true },
-      );
+
+      if (auth.mfaRequired && auth.mfaToken) {
+        setMfaToken(auth.mfaToken);
+        return;
+      }
+
+      if (!auth.user) {
+        throw new Error('Unable to complete sign in');
+      }
+
+      completeSignIn(auth.user);
     } catch (caughtError) {
       setTurnstileToken(null);
       setTurnstileResetKey((currentKey) => currentKey + 1);
@@ -260,8 +251,37 @@ function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
     }
   }
 
+  async function handleMfaSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!mfaToken) {
+      return;
+    }
+
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      const auth = await verifyMfaLogin(mfaToken, mfaCode);
+
+      if (!auth.user) {
+        throw new Error('Unable to complete sign in');
+      }
+
+      completeSignIn(auth.user);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Unable to verify authentication code',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
-    <Box className="auth-shell">
+    <Box className="auth-shell" component="main">
       <Box className="auth-showcase">
         <Stack spacing={2.5} sx={{ maxWidth: 480 }}>
           <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
@@ -271,7 +291,10 @@ function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
             </Typography>
           </Stack>
           <Box>
-            <Typography component="h2" sx={{ fontWeight: 800, fontSize: '2.5rem' }}>
+            <Typography
+              component="p"
+              sx={{ fontWeight: 800, fontSize: '2.5rem', lineHeight: 1.15 }}
+            >
               Short links you can actually manage
             </Typography>
             <Typography sx={{ mt: 1.5, color: 'rgba(255,255,255,0.82)' }}>
@@ -286,7 +309,7 @@ function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
         <Paper className="auth-panel" elevation={0}>
           <Stack spacing={3}>
             <Stack spacing={1}>
-              <Typography variant="h4">
+              <Typography component="h1" variant="h4">
                 {isLogin ? 'Welcome back' : 'Create your account'}
               </Typography>
               <Typography color="text.secondary">
@@ -296,6 +319,12 @@ function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
               </Typography>
             </Stack>
 
+            {passwordResetSuccess ? (
+              <Alert severity="success">
+                Your password was reset. Sign in with your new password.
+              </Alert>
+            ) : null}
+
             {error ? <Alert severity="error">{error}</Alert> : null}
 
             {pendingUrl ? (
@@ -304,6 +333,51 @@ function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
               </Alert>
             ) : null}
 
+            {mfaToken ? (
+              <Box component="form" onSubmit={handleMfaSubmit}>
+                <Stack spacing={2.25}>
+                  <Typography color="text.secondary">
+                    Enter the 6-digit code from your authenticator app.
+                  </Typography>
+                  <TextField
+                    autoComplete="one-time-code"
+                    autoFocus
+                    fullWidth
+                    label="Authentication code"
+                    onChange={(event) => setMfaCode(event.target.value.trim())}
+                    placeholder="123456"
+                    required
+                    slotProps={{
+                      htmlInput: {
+                        inputMode: 'numeric',
+                        pattern: '[0-9]*',
+                        maxLength: 6,
+                      },
+                    }}
+                    value={mfaCode}
+                  />
+                  <Button
+                    disabled={isSubmitting || mfaCode.length !== 6}
+                    fullWidth
+                    size="large"
+                    type="submit"
+                    variant="contained"
+                  >
+                    {isSubmitting ? 'Verifying...' : 'Verify and sign in'}
+                  </Button>
+                  <Button
+                    fullWidth
+                    onClick={() => {
+                      setMfaToken(null);
+                      setMfaCode('');
+                      setError(null);
+                    }}
+                  >
+                    Back to sign in
+                  </Button>
+                </Stack>
+              </Box>
+            ) : (
             <Box component="form" onSubmit={handleSubmit}>
               <Stack spacing={2.25}>
                 <TextField
@@ -319,8 +393,9 @@ function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
                 <TextField
                   autoComplete={isLogin ? 'current-password' : 'new-password'}
                   fullWidth
-                  helperText="Use at least 6 characters."
+                  helperText="Use at least 15 characters."
                   label="Password"
+                  slotProps={{ htmlInput: { minLength: 15 } }}
                   onChange={(event) => setPassword(event.target.value)}
                   required
                   type="password"
@@ -341,7 +416,17 @@ function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
                 </Button>
               </Stack>
             </Box>
+            )}
 
+            {isLogin && !mfaToken ? (
+              <Typography color="text.secondary" sx={{ textAlign: 'center' }}>
+                <Button component={RouterLink} size="small" to="/forgot-password">
+                  Forgot password?
+                </Button>
+              </Typography>
+            ) : null}
+
+            {!mfaToken ? (
             <Typography color="text.secondary" sx={{ textAlign: 'center' }}>
               {isLogin ? 'No account yet?' : 'Already registered?'}{' '}
               <Button
@@ -355,13 +440,28 @@ function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
                 {isLogin ? 'Create one' : 'Sign in'}
               </Button>
             </Typography>
+            ) : null}
 
+            {!mfaToken ? (
             <Typography color="text.secondary" sx={{ textAlign: 'center' }}>
               Building an integration?{' '}
               <Button component={RouterLink} size="small" to="/developers">
                 View API docs
               </Button>
             </Typography>
+            ) : null}
+
+            {!mfaToken ? (
+            <Typography color="text.secondary" sx={{ textAlign: 'center' }}>
+              <Button component="a" href="/privacy" size="small">
+                Privacy
+              </Button>
+              {' · '}
+              <Button component="a" href="/terms" size="small">
+                Terms
+              </Button>
+            </Typography>
+            ) : null}
           </Stack>
         </Paper>
       </Box>
@@ -369,8 +469,189 @@ function AuthLayout({ mode }: { mode: 'login' | 'register' }) {
   );
 }
 
+function VerifyEmailPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user, setUser } = useAuth();
+  const [otp, setOtp] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendCooldownSeconds, setResendCooldownSeconds] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (resendCooldownSeconds <= 0) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setResendCooldownSeconds((current) => Math.max(current - 1, 0));
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [resendCooldownSeconds]);
+
+  async function handleVerify(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      const verifiedUser = await verifyEmail(otp);
+      saveUser(verifiedUser);
+      setUser(verifiedUser);
+      setToast('Email verified');
+
+      const pendingUrl = normalizePendingUrl(
+        new URLSearchParams(location.search).get(PENDING_URL_QUERY_PARAM) ?? '',
+      );
+
+      navigate(
+        pendingUrl
+          ? buildUrlWithPendingParam('/my-links', pendingUrl)
+          : '/my-links',
+        { replace: true },
+      );
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Unable to verify email',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleResend() {
+    if (resendCooldownSeconds > 0) {
+      return;
+    }
+
+    setError(null);
+    setIsResending(true);
+
+    try {
+      await resendVerificationEmail();
+      setToast('Verification code sent');
+      setResendCooldownSeconds(60);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Unable to resend verification code',
+      );
+    } finally {
+      setIsResending(false);
+    }
+  }
+
+  return (
+    <Box className="auth-shell" component="main">
+      <Box className="auth-showcase">
+        <Stack spacing={2.5} sx={{ maxWidth: 480 }}>
+          <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
+            <BrandMark />
+            <Typography sx={{ fontWeight: 800, letterSpacing: '0.06em' }}>
+              {PRODUCT_NAME}
+            </Typography>
+          </Stack>
+          <Box>
+            <Typography
+              component="p"
+              sx={{ fontWeight: 800, fontSize: '2.5rem', lineHeight: 1.15 }}
+            >
+              Verify your email
+            </Typography>
+            <Typography sx={{ mt: 1.5, color: 'rgba(255,255,255,0.82)' }}>
+              Enter the 6-digit code we sent to your inbox to finish setting up
+              your account.
+            </Typography>
+          </Box>
+        </Stack>
+      </Box>
+
+      <Box className="auth-panel-wrap">
+        <Paper className="auth-panel" elevation={0}>
+          <Stack spacing={3}>
+            <Stack spacing={1}>
+              <Typography component="h1" variant="h4">
+                Check your email
+              </Typography>
+              <Typography color="text.secondary">
+                {user?.email
+                  ? `We sent a verification code to ${user.email}.`
+                  : 'We sent a verification code to your email address.'}
+              </Typography>
+            </Stack>
+
+            {error ? <Alert severity="error">{error}</Alert> : null}
+
+            <Box component="form" onSubmit={handleVerify}>
+              <Stack spacing={2.25}>
+                <TextField
+                  autoComplete="one-time-code"
+                  autoFocus
+                  fullWidth
+                  label="Verification code"
+                  onChange={(event) => setOtp(event.target.value.trim())}
+                  placeholder="123456"
+                  required
+                  slotProps={{
+                    htmlInput: {
+                      inputMode: 'numeric',
+                      pattern: '[0-9]*',
+                      maxLength: 6,
+                    },
+                  }}
+                  value={otp}
+                />
+                <Button
+                  disabled={isSubmitting || otp.length !== 6}
+                  fullWidth
+                  size="large"
+                  type="submit"
+                  variant="contained"
+                >
+                  {isSubmitting ? 'Verifying...' : 'Verify email'}
+                </Button>
+              </Stack>
+            </Box>
+
+            <Typography color="text.secondary" sx={{ textAlign: 'center' }}>
+              Didn&apos;t get a code?{' '}
+              <Button
+                disabled={isResending || resendCooldownSeconds > 0}
+                onClick={() => void handleResend()}
+                size="small"
+              >
+                {resendCooldownSeconds > 0
+                  ? `Resend in ${resendCooldownSeconds}s`
+                  : isResending
+                    ? 'Sending...'
+                    : 'Resend code'}
+              </Button>
+            </Typography>
+          </Stack>
+        </Paper>
+      </Box>
+
+      <Snackbar
+        autoHideDuration={2600}
+        message={toast}
+        onClose={() => setToast(null)}
+        open={Boolean(toast)}
+      />
+    </Box>
+  );
+}
+
 function MyLinksPage() {
-  const token = getToken();
+  const { isAuthenticated } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const pendingQueryUrl = searchParams.get(PENDING_URL_QUERY_PARAM);
   const consumedPendingRef = useRef<string | null>(null);
@@ -386,11 +667,10 @@ function MyLinksPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) {
+    if (!isAuthenticated) {
       return;
     }
 
-    const authToken = token;
     let mounted = true;
 
     async function loadLinks() {
@@ -398,7 +678,7 @@ function MyLinksPage() {
       setError(null);
 
       try {
-        const nextLinks = await getLinks(authToken, isArchivedView);
+        const nextLinks = await getLinks(isArchivedView);
 
         if (mounted) {
           setLinks(nextLinks);
@@ -423,10 +703,10 @@ function MyLinksPage() {
     return () => {
       mounted = false;
     };
-  }, [isArchivedView, token]);
+  }, [isArchivedView, isAuthenticated]);
 
   useEffect(() => {
-    if (!token || !pendingQueryUrl) {
+    if (!isAuthenticated || !pendingQueryUrl) {
       return;
     }
 
@@ -448,7 +728,7 @@ function MyLinksPage() {
     setError(null);
     setFullUrl(pendingUrl);
     setDialogOpen(true);
-  }, [pendingQueryUrl, setSearchParams, token]);
+  }, [pendingQueryUrl, setSearchParams, isAuthenticated]);
 
   const linkCountLabel = useMemo(() => {
     if (links.length === 1) {
@@ -474,16 +754,12 @@ function MyLinksPage() {
   async function handleCreateLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!token) {
-      return;
-    }
-
     setIsCreating(true);
     setError(null);
     setDuplicateLink(null);
 
     try {
-      const createdLink = await createLink(token, fullUrl, shortId);
+      const createdLink = await createLink(fullUrl, shortId);
       if (!isArchivedView) {
         setLinks((currentLinks) => [createdLink, ...currentLinks]);
       }
@@ -515,14 +791,10 @@ function MyLinksPage() {
   }
 
   async function handleArchive(link: ShortLink) {
-    if (!token) {
-      return;
-    }
-
     setError(null);
 
     try {
-      await archiveLink(token, link.shortId);
+      await archiveLink(link.shortId);
       setLinks((currentLinks) =>
         currentLinks.filter((currentLink) => currentLink.id !== link.id),
       );
@@ -537,14 +809,10 @@ function MyLinksPage() {
   }
 
   async function handleUnarchive(link: ShortLink) {
-    if (!token) {
-      return;
-    }
-
     setError(null);
 
     try {
-      await unarchiveLink(token, link.shortId);
+      await unarchiveLink(link.shortId);
       setLinks((currentLinks) =>
         currentLinks.filter((currentLink) => currentLink.id !== link.id),
       );
@@ -764,10 +1032,10 @@ function MyLinksPage() {
 }
 
 function NotFoundPage() {
-  const isAuthenticated = Boolean(getToken());
+  const { isAuthenticated } = useAuth();
 
   return (
-    <Box className="auth-shell">
+    <Box className="auth-shell" component="main">
       <Box className="auth-panel-wrap" sx={{ gridColumn: '1 / -1' }}>
         <Paper className="auth-panel" elevation={0}>
           <Stack spacing={3} sx={{ alignItems: 'center', textAlign: 'center' }}>
@@ -775,7 +1043,9 @@ function NotFoundPage() {
             <Typography variant="overline" color="text.secondary">
               {PRODUCT_NAME}
             </Typography>
-            <Typography variant="h4">Link not found</Typography>
+            <Typography component="h1" variant="h4">
+              Link not found
+            </Typography>
             <Typography color="text.secondary">
               This short link does not exist, has been removed, or is no longer
               active.
@@ -814,6 +1084,30 @@ function App() {
             <PublicOnlyRoute>
               <AuthLayout mode="register" />
             </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/forgot-password"
+          element={
+            <PublicOnlyRoute>
+              <ForgotPasswordPage />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/reset-password"
+          element={
+            <PublicOnlyRoute>
+              <ResetPasswordPage />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/verify-email"
+          element={
+            <VerifyEmailRoute>
+              <VerifyEmailPage />
+            </VerifyEmailRoute>
           }
         />
         <Route

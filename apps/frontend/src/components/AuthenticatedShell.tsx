@@ -23,7 +23,7 @@ import {
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
-import { clearAuth, getUser } from '../auth';
+import { useAuth } from '../auth-context';
 import { BrandMark } from './BrandMark';
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from '../constants/product';
 
@@ -142,10 +142,10 @@ export function AuthenticatedShell({
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isDocs = variant === 'docs';
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const user = getUser();
+  const { user, logout } = useAuth();
 
-  function handleLogout() {
-    clearAuth();
+  async function handleLogout() {
+    await logout();
     navigate('/login', { replace: true });
   }
 
@@ -156,7 +156,9 @@ export function AuthenticatedShell({
   const sidebar = (
     <Stack className="sidebar-inner" spacing={0}>
       <Stack className="sidebar-brand" direction="row" spacing={1.25}>
-        <BrandMark />
+        <RouterLink aria-label={`${PRODUCT_NAME} home`} to="/my-links">
+          <BrandMark />
+        </RouterLink>
         <Box sx={{ minWidth: 0 }}>
           <Typography noWrap sx={{ fontWeight: 800, lineHeight: 1.2 }}>
             {PRODUCT_NAME}

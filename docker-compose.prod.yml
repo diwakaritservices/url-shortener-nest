@@ -38,6 +38,13 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:?FRONTEND_ORIGINS is required}
       TRUST_PROXY: ${TRUST_PROXY:-1}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
+      SMTP_PASS: ${SMTP_PASS:?SMTP_PASS is required}
+      SMTP_FROM: ${SMTP_FROM:-}
+      EMAIL_VERIFICATION_OTP_TTL_SECONDS: ${EMAIL_VERIFICATION_OTP_TTL_SECONDS:-600}
     expose:
       - "3000"
     depends_on:

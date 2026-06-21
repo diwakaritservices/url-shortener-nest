@@ -19,6 +19,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import type { ApiKeySummary, CreateApiKeyResponse } from '@url-shortener/shared';
 import type { AuthenticatedRequest } from '../auth/jwt-auth.guard';
+import { EmailVerifiedGuard } from '../auth/email-verified.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   ApiKeySummaryDto,
@@ -30,7 +31,7 @@ import { CreateApiKeyDto } from './dto/create-api-key.dto';
 @ApiTags('API Keys')
 @ApiBearerAuth('access-token')
 @Controller('v1/api-keys')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, EmailVerifiedGuard)
 export class ApiKeysController {
   constructor(private readonly apiKeysService: ApiKeysService) {}
 

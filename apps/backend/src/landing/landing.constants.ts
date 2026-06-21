@@ -6,7 +6,6 @@ export const PRODUCT_DESCRIPTION =
 export const LOGO_PATH = '/logo.svg';
 export const FAVICON_PATH = '/favicon.svg';
 export const OG_IMAGE_PATH = '/og-image.png';
-export const AUTH_TOKEN_STORAGE_KEY = 'url_shortener_access_token';
 export const PENDING_URL_QUERY_PARAM = 'url';
 
 export const LANDING_KEYWORDS = [

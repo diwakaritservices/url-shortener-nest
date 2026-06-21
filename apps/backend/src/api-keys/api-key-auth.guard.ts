@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -27,6 +28,10 @@ export class ApiKeyAuthGuard implements CanActivate {
 
     if (!user) {
       throw new UnauthorizedException('Invalid API key');
+    }
+
+    if (!user.emailVerified) {
+      throw new ForbiddenException('Email address is not verified');
     }
 
     request.user = this.toAuthenticatedUser(user);
@@ -60,11 +65,15 @@ export class ApiKeyAuthGuard implements CanActivate {
     _id: { toString(): string };
     email: string;
     name?: string | null;
+    emailVerified?: boolean;
+    mfaEnabled?: boolean;
   }): AuthenticatedUser {
     return {
       id: user._id.toString(),
       email: user.email,
       name: user.name ?? null,
+      emailVerified: user.emailVerified ?? true,
+      mfaEnabled: user.mfaEnabled ?? false,
     };
   }
 }

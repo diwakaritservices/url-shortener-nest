@@ -30,6 +30,7 @@ import {
 } from '../swagger/dto/short-url-response.dto';
 import { CreateUrlDto } from '../urls/dto/create-url.dto';
 import { UrlsService } from '../urls/urls.service';
+import { parseArchivedQueryFilter } from './archived-query.util';
 
 @ApiTags('Links')
 @ApiSecurity('api-key')
@@ -83,7 +84,7 @@ export class IntegrationsController {
   ): Promise<IntegrationShortUrlResponse[]> {
     return this.urlsService.findAllIntegrationLinksForUser(
       request.user.id,
-      this.parseArchivedFilter(archived),
+      parseArchivedQueryFilter(archived),
     );
   }
 
@@ -121,25 +122,4 @@ export class IntegrationsController {
     );
   }
 
-  private parseArchivedFilter(
-    archived?: string,
-  ): boolean | 'all' | undefined {
-    if (archived === undefined) {
-      return 'all';
-    }
-
-    if (archived === 'true') {
-      return true;
-    }
-
-    if (archived === 'false') {
-      return false;
-    }
-
-    if (archived === 'all') {
-      return 'all';
-    }
-
-    return 'all';
-  }
 }

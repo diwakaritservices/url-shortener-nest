@@ -1,12 +1,18 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
+import { AuthController } from './auth/auth.controller';
+import { PrivateCacheMiddleware } from './common/private-cache.middleware';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { IntegrationsController } from './integrations/integrations.controller';
 import { LandingModule } from './landing/landing.module';
+import { ApiKeysController } from './api-keys/api-keys.controller';
+import { ApiKeysModule } from './api-keys/api-keys.module';
 import { UrlsModule } from './urls/urls.module';
+import { UrlsController } from './urls/urls.controller';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -50,4 +56,15 @@ import { UsersModule } from './users/users.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(PrivateCacheMiddleware)
+      .forRoutes(
+        AuthController,
+        UrlsController,
+        IntegrationsController,
+        ApiKeysController,
+      );
+  }
+}

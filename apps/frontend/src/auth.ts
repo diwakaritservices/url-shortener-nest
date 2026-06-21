@@ -1,23 +1,13 @@
-import type { AuthResponse, AuthUser } from './api';
+import type { AuthUser } from './api';
 
-const TOKEN_KEY = 'url_shortener_access_token';
 const USER_KEY = 'url_shortener_user';
 
-export function saveAuth(auth: AuthResponse): void {
-  localStorage.setItem(TOKEN_KEY, auth.accessToken);
-  localStorage.setItem(USER_KEY, JSON.stringify(auth.user));
-}
-
 export function saveUser(user: AuthUser): void {
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-}
-
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  sessionStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 export function getUser(): AuthUser | null {
-  const rawUser = localStorage.getItem(USER_KEY);
+  const rawUser = sessionStorage.getItem(USER_KEY);
 
   if (!rawUser) {
     return null;
@@ -32,6 +22,9 @@ export function getUser(): AuthUser | null {
 }
 
 export function clearAuth(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(USER_KEY);
+}
+
+export function hasStoredUser(): boolean {
+  return getUser() !== null;
 }

@@ -18,6 +18,18 @@ export class User {
 
   @Prop({ type: String, trim: true, maxlength: 80, default: null })
   name: string | null;
+
+  @Prop({ type: Boolean, default: true })
+  emailVerified: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  mfaEnabled: boolean;
+
+  @Prop({ type: String, default: null, select: false })
+  totpSecret: string | null;
+
+  @Prop({ type: String, default: null, select: false })
+  mfaPendingSecret: string | null;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -17,7 +17,7 @@ import { ApiReferenceReact } from '@scalar/api-reference-react';
 import '@scalar/api-reference-react/style.css';
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { getToken } from '../auth';
+import { useAuth } from '../auth-context';
 import { AuthenticatedShell } from '../components/AuthenticatedShell';
 import { BrandMark } from '../components/BrandMark';
 import { getOpenApiSpecUrl } from '../lib/developers';
@@ -138,7 +138,7 @@ function PublicDevelopersToolbar() {
 }
 
 export function DevelopersPage() {
-  const isAuthenticated = Boolean(getToken());
+  const { isAuthenticated } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -151,7 +151,7 @@ export function DevelopersPage() {
   }
 
   return (
-    <Box className="developers-shell">
+    <Box className="developers-shell" component="main">
       <PublicDevelopersToolbar />
       <DevelopersReference compactSidebar={isMobile} />
     </Box>

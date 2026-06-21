@@ -41,7 +41,7 @@ export class RedirectController {
           return;
         }
 
-        response.redirect(302, '/not-found');
+        response.redirect(404, '/not-found');
         return;
       }
 

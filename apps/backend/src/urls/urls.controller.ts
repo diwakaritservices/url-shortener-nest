@@ -21,6 +21,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../auth/jwt-auth.guard';
+import { EmailVerifiedGuard } from '../auth/email-verified.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   ShortUrlConflictErrorDto,
@@ -32,7 +33,7 @@ import { ShortUrlResponse, UrlsService } from './urls.service';
 @ApiTags('Links')
 @ApiBearerAuth('access-token')
 @Controller('urls')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, EmailVerifiedGuard)
 export class UrlsController {
   constructor(private readonly urlsService: UrlsService) {}
 

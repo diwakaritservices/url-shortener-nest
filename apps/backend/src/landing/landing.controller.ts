@@ -15,6 +15,36 @@ export class LandingController {
     response.send(this.landingService.renderLandingPage());
   }
 
+  @Get('privacy')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @Header('Cache-Control', 'public, max-age=3600')
+  getPrivacyPage(@Res() response: Response): void {
+    response.send(this.landingService.renderPrivacyPage());
+  }
+
+  @Get('terms')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @Header('Cache-Control', 'public, max-age=3600')
+  getTermsPage(@Res() response: Response): void {
+    response.send(this.landingService.renderTermsPage());
+  }
+
+  @Get('not-found')
+  getNotFoundPage(@Res() response: Response): void {
+    response
+      .status(404)
+      .type('text/html; charset=utf-8')
+      .set('Cache-Control', 'no-store')
+      .send(this.landingService.renderNotFoundPage());
+  }
+
+  @Get('.well-known/security.txt')
+  @Header('Content-Type', 'text/plain; charset=utf-8')
+  @Header('Cache-Control', 'public, max-age=86400')
+  getSecurityTxt(@Res() response: Response): void {
+    response.send(this.landingService.renderSecurityTxt());
+  }
+
   @Get('robots.txt')
   @Header('Content-Type', 'text/plain; charset=utf-8')
   @Header('Cache-Control', 'public, max-age=3600')

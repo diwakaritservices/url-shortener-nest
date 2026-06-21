@@ -2,7 +2,13 @@ export type {
   AuthenticatedUser,
   AuthCredentials,
   AuthResponse,
+  DisableMfaRequest,
+  ForgotPasswordRequest,
+  MfaLoginVerifyRequest,
+  MfaSetupResponse,
+  ResetPasswordRequest,
   UpdateProfileRequest,
+  VerifyEmailRequest,
 } from './auth';
 export type {
   ApiKeySummary,
