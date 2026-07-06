@@ -1,10 +1,16 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 interface TurnstileResponse {
   success: boolean;
   'error-codes'?: string[];
 }
+
+const TURNSTILE_VERIFY_TIMEOUT_MS = 10_000;
 
 @Injectable()
 export class TurnstileService {
@@ -18,17 +24,41 @@ export class TurnstileService {
       return;
     }
 
-    const response = await fetch(this.siteverifyUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        secret: this.getSecretKey(),
-        response: token,
-        remoteip: remoteIp,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      TURNSTILE_VERIFY_TIMEOUT_MS,
+    );
+
+    let response: Response;
+
+    try {
+      response = await fetch(this.siteverifyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          secret: this.getSecretKey(),
+          response: token,
+          remoteip: remoteIp,
+        }),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ServiceUnavailableException(
+          'Human verification is temporarily unavailable. Try again shortly.',
+        );
+      }
+
+      throw new ServiceUnavailableException(
+        'Human verification is temporarily unavailable. Try again shortly.',
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+
     const result = (await response.json()) as TurnstileResponse;
 
     if (!result.success) {

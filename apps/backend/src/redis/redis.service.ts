@@ -11,11 +11,13 @@ import { createClient, RedisClientType } from 'redis';
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private readonly client: RedisClientType;
+  private blockingClient: RedisClientType | null = null;
 
   constructor(private readonly configService: ConfigService) {
     this.client = createClient({
       socket: {
         reconnectStrategy: false,
+        connectTimeout: 5_000,
       },
       url:
         this.configService.get<string>('REDIS_URL') ?? 'redis://localhost:8765',
@@ -35,6 +37,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
+    if (this.blockingClient?.isOpen) {
+      await this.blockingClient.quit();
+    }
+
     if (!this.client.isOpen) {
       return;
     }
@@ -106,6 +112,19 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   getClient(): RedisClientType | null {
     return this.client.isOpen ? this.client : null;
+  }
+
+  async getBlockingClient(): Promise<RedisClientType | null> {
+    if (!this.client.isOpen) {
+      return null;
+    }
+
+    if (!this.blockingClient) {
+      this.blockingClient = this.client.duplicate();
+      await this.blockingClient.connect();
+    }
+
+    return this.blockingClient.isOpen ? this.blockingClient : null;
   }
 
   isConnected(): boolean {

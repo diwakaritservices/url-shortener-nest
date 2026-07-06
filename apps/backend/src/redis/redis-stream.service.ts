@@ -101,7 +101,7 @@ export class RedisStreamService {
     count: number,
     blockMs: number,
   ): Promise<StreamMessage[]> {
-    const client = this.redisService.getClient();
+    const client = await this.redisService.getBlockingClient();
 
     if (!client) {
       return [];

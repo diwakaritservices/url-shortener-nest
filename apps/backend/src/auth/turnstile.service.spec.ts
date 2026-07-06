@@ -1,4 +1,7 @@
-import { BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TurnstileService } from './turnstile.service';
@@ -47,7 +50,7 @@ describe('TurnstileService', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       'https://challenges.cloudflare.com/turnstile/v0/siteverify',
-      {
+      expect.objectContaining({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -57,7 +60,18 @@ describe('TurnstileService', () => {
           response: 'turnstile-token',
           remoteip: '203.0.113.10',
         }),
-      },
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  it('fails fast when Turnstile verification times out', async () => {
+    const abortError = new Error('The operation was aborted');
+    abortError.name = 'AbortError';
+    fetchMock.mockRejectedValue(abortError);
+
+    await expect(service.verifyToken('turnstile-token')).rejects.toThrow(
+      ServiceUnavailableException,
     );
   });
 

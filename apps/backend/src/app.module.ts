@@ -40,6 +40,8 @@ import { UsersModule } from './users/users.module';
 
         return {
           uri: uri ?? 'mongodb://localhost:27017/url-shortener',
+          serverSelectionTimeoutMS: 10_000,
+          connectTimeoutMS: 10_000,
         };
       },
     }),
