@@ -23,6 +23,8 @@ import type { Request, Response } from 'express';
 import { UrlsService } from '../urls/urls.service';
 import { AuthCookieService } from './auth-cookie.service';
 import { AuthService } from './auth.service';
+import { DomainEventName } from '../notifications/domain-event.constants';
+import { DomainEventPublisher } from '../notifications/domain-event.publisher';
 import type { AuthResponse, AuthenticatedUser } from './auth.service';
 import { AuthCredentialsDto } from './dto/auth-credentials.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -55,6 +57,7 @@ export class AuthController {
     private readonly authCookieService: AuthCookieService,
     private readonly turnstileService: TurnstileService,
     private readonly urlsService: UrlsService,
+    private readonly domainEventPublisher: DomainEventPublisher,
   ) {}
 
   @Post('signup')
@@ -233,6 +236,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Export account profile and link data' })
   async exportMe(@Req() request: AuthenticatedRequest) {
     const links = await this.urlsService.findAllForUser(request.user.id, 'all');
+
+    this.domainEventPublisher.publish(DomainEventName.AccountExported, {
+      user: request.user,
+      linkCount: links.length,
+    });
 
     return {
       exportedAt: new Date().toISOString(),

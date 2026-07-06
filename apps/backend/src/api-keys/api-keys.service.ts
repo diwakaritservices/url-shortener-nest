@@ -8,6 +8,8 @@ import { createHash, randomBytes } from 'crypto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { UsersService } from '../users/users.service';
+import { DomainEventName } from '../notifications/domain-event.constants';
+import { DomainEventPublisher } from '../notifications/domain-event.publisher';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { ApiKey, ApiKeyDocument } from './schemas/api-key.schema';
 
@@ -19,6 +21,7 @@ export class ApiKeysService {
     @InjectModel(ApiKey.name)
     private readonly apiKeyModel: Model<ApiKeyDocument>,
     private readonly usersService: UsersService,
+    private readonly domainEventPublisher: DomainEventPublisher,
   ) {}
 
   async createForUser(
@@ -31,6 +34,12 @@ export class ApiKeysService {
       keyHash,
       keyPrefix,
       name: createApiKeyDto.name?.trim() || 'Default',
+    });
+
+    this.domainEventPublisher.publish(DomainEventName.ApiKeyCreated, {
+      userId: ownerId,
+      apiKeyName: apiKey.name,
+      keyPrefix: apiKey.keyPrefix,
     });
 
     return {
@@ -71,6 +80,12 @@ export class ApiKeysService {
     if (!apiKey) {
       throw new NotFoundException('API key not found');
     }
+
+    this.domainEventPublisher.publish(DomainEventName.ApiKeyRevoked, {
+      userId: ownerId,
+      apiKeyName: apiKey.name,
+      keyPrefix: apiKey.keyPrefix,
+    });
 
     return this.toSummary(apiKey);
   }

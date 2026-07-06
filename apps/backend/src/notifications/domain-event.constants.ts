@@ -1,0 +1,15 @@
+export enum DomainEventName {
+  UserRegistered = 'domain.user.registered',
+  UserLoggedIn = 'domain.user.logged-in',
+  UrlShortened = 'domain.url.shortened',
+  VerificationOtpRequested = 'domain.verification.otp-requested',
+  PasswordResetOtpRequested = 'domain.password-reset.otp-requested',
+  ApiKeyCreated = 'domain.api-key.created',
+  ApiKeyRevoked = 'domain.api-key.revoked',
+  MfaEnabled = 'domain.mfa.enabled',
+  MfaDisabled = 'domain.mfa.disabled',
+  PasswordChanged = 'domain.password.changed',
+  ProfileUpdated = 'domain.profile.updated',
+  AccountExported = 'domain.account.exported',
+  AccountDeleted = 'domain.account.deleted',
+}

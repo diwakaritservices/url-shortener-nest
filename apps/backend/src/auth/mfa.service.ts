@@ -11,6 +11,8 @@ import type { MfaSetupResponse } from '@url-shortener/shared';
 import * as bcrypt from 'bcryptjs';
 import * as speakeasy from 'speakeasy';
 import { RedisService } from '../redis/redis.service';
+import { DomainEventName } from '../notifications/domain-event.constants';
+import { DomainEventPublisher } from '../notifications/domain-event.publisher';
 import { UsersService } from '../users/users.service';
 import type { UserDocument } from '../users/schemas/user.schema';
 import type { AuthenticatedUser } from './auth.service';
@@ -25,6 +27,7 @@ export class MfaService {
     private readonly usersService: UsersService,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
+    private readonly domainEventPublisher: DomainEventPublisher,
   ) {}
 
   async beginSetup(userId: string, email: string): Promise<MfaSetupResponse> {
@@ -69,6 +72,14 @@ export class MfaService {
       user.mfaPendingSecret,
     );
 
+    this.domainEventPublisher.publish(DomainEventName.MfaEnabled, {
+      user: {
+        id: updatedUser._id.toString(),
+        email: updatedUser.email,
+        name: updatedUser.name ?? null,
+      },
+    });
+
     return this.toAuthenticatedUser(updatedUser);
   }
 
@@ -96,6 +107,14 @@ export class MfaService {
     this.assertValidTotp(user.totpSecret, code);
 
     const updatedUser = await this.usersService.disableMfa(userId);
+
+    this.domainEventPublisher.publish(DomainEventName.MfaDisabled, {
+      user: {
+        id: updatedUser._id.toString(),
+        email: updatedUser.email,
+        name: updatedUser.name ?? null,
+      },
+    });
 
     return this.toAuthenticatedUser(updatedUser);
   }

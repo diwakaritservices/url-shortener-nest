@@ -4,6 +4,8 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { UsersService } from '../users/users.service';
+import { DomainEventName } from '../notifications/domain-event.constants';
+import { DomainEventPublisher } from '../notifications/domain-event.publisher';
 import { ApiKeysService } from './api-keys.service';
 import { ApiKey } from './schemas/api-key.schema';
 
@@ -18,6 +20,9 @@ describe('ApiKeysService', () => {
   let usersService: {
     findById: jest.Mock;
   };
+  let domainEventPublisher: {
+    publish: jest.Mock;
+  };
 
   beforeEach(async () => {
     model = {
@@ -27,6 +32,9 @@ describe('ApiKeysService', () => {
     };
     usersService = {
       findById: jest.fn(),
+    };
+    domainEventPublisher = {
+      publish: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -39,6 +47,10 @@ describe('ApiKeysService', () => {
         {
           provide: UsersService,
           useValue: usersService,
+        },
+        {
+          provide: DomainEventPublisher,
+          useValue: domainEventPublisher,
         },
       ],
     }).compile();
@@ -61,6 +73,13 @@ describe('ApiKeysService', () => {
     expect(response.name).toBe('CI key');
     expect(response.apiKey.startsWith('lnk_')).toBe(true);
     expect(response.keyPrefix).toBe(response.apiKey.slice(0, 12));
+    expect(domainEventPublisher.publish).toHaveBeenCalledWith(
+      DomainEventName.ApiKeyCreated,
+      expect.objectContaining({
+        userId: ownerId,
+        apiKeyName: 'CI key',
+      }),
+    );
     expect(model.create).toHaveBeenCalledWith(
       expect.objectContaining({
         ownerId: new Types.ObjectId(ownerId),

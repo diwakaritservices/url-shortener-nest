@@ -7,7 +7,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'node:crypto';
-import { MailService } from '../mail/mail.service';
+import { DomainEventName } from '../notifications/domain-event.constants';
+import { DomainEventPublisher } from '../notifications/domain-event.publisher';
 import { RedisService } from '../redis/redis.service';
 import { UsersService } from '../users/users.service';
 import { IsStrongPasswordConstraint } from './validators/password-policy.validator';
@@ -20,7 +21,7 @@ export class PasswordResetService {
   constructor(
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
-    private readonly mailService: MailService,
+    private readonly domainEventPublisher: DomainEventPublisher,
     private readonly usersService: UsersService,
   ) {}
 
@@ -43,7 +44,10 @@ export class PasswordResetService {
     );
     await this.redisService.del(this.buildAttemptsKey(normalizedEmail));
 
-    await this.mailService.sendPasswordResetOtp(normalizedEmail, otp);
+    this.domainEventPublisher.publish(DomainEventName.PasswordResetOtpRequested, {
+      email: normalizedEmail,
+      otp,
+    });
   }
 
   async resetPassword(
@@ -92,6 +96,14 @@ export class PasswordResetService {
     const passwordHash = await bcrypt.hash(newPassword, 12);
 
     await this.usersService.updatePasswordHash(user._id.toString(), passwordHash);
+
+    this.domainEventPublisher.publish(DomainEventName.PasswordChanged, {
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        name: user.name ?? null,
+      },
+    });
 
     await this.redisService.del(this.buildOtpKey(normalizedEmail));
     await this.redisService.del(this.buildAttemptsKey(normalizedEmail));

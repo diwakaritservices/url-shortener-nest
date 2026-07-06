@@ -16,6 +16,8 @@ import { EmailVerificationService } from './email-verification.service';
 import { MfaService } from './mfa.service';
 import { PasswordResetService } from './password-reset.service';
 import { IsStrongPasswordConstraint } from './validators/password-policy.validator';
+import { DomainEventName } from '../notifications/domain-event.constants';
+import { DomainEventPublisher } from '../notifications/domain-event.publisher';
 
 export type { AuthenticatedUser, AuthResponse };
 
@@ -35,6 +37,7 @@ export class AuthService {
     private readonly emailVerificationService: EmailVerificationService,
     private readonly mfaService: MfaService,
     private readonly passwordResetService: PasswordResetService,
+    private readonly domainEventPublisher: DomainEventPublisher,
   ) {}
 
   async signup(credentials: AuthCredentialsDto): Promise<AuthResponse> {
@@ -52,6 +55,15 @@ export class AuthService {
     if (!emailVerified) {
       await this.emailVerificationService.sendVerificationOtp(user);
     }
+
+    this.domainEventPublisher.publish(DomainEventName.UserRegistered, {
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        name: user.name ?? null,
+      },
+      emailVerified,
+    });
 
     return this.createAuthResponse(user);
   }
@@ -78,11 +90,15 @@ export class AuthService {
       return this.mfaService.createLoginChallenge(user);
     }
 
+    this.notifySuccessfulSignIn(user, false);
+
     return this.createAuthResponse(user);
   }
 
   async verifyMfaLogin(mfaToken: string, code: string): Promise<AuthResponse> {
     const { user } = await this.mfaService.completeLogin(mfaToken, code);
+
+    this.notifySuccessfulSignIn(user, true);
 
     return this.createAuthResponse(user);
   }
@@ -167,9 +183,25 @@ export class AuthService {
       throw new BadRequestException('Name cannot be empty');
     }
 
-    const user = await this.usersService.updateName(userId, normalizedName);
+    const user = await this.usersService.findById(userId);
 
-    return this.toAuthenticatedUser(user);
+    if (!user) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    const previousName = user.name ?? null;
+    const updatedUser = await this.usersService.updateName(userId, normalizedName);
+
+    this.domainEventPublisher.publish(DomainEventName.ProfileUpdated, {
+      user: {
+        id: updatedUser._id.toString(),
+        email: updatedUser.email,
+        name: updatedUser.name ?? null,
+      },
+      previousName,
+    });
+
+    return this.toAuthenticatedUser(updatedUser);
   }
 
   async changePassword(
@@ -196,9 +228,29 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(newPassword, this.saltRounds);
     await this.usersService.updatePasswordHash(userId, passwordHash);
+
+    this.domainEventPublisher.publish(DomainEventName.PasswordChanged, {
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        name: user.name ?? null,
+      },
+    });
   }
 
   async deleteAccount(userId: string): Promise<void> {
+    const user = await this.usersService.findById(userId);
+
+    if (user) {
+      this.domainEventPublisher.publish(DomainEventName.AccountDeleted, {
+        user: {
+          id: user._id.toString(),
+          email: user.email,
+          name: user.name ?? null,
+        },
+      });
+    }
+
     await this.usersService.deleteAccountAndData(userId);
   }
 
@@ -213,6 +265,17 @@ export class AuthService {
         expiresIn: this.getJwtExpiresIn(),
       },
     );
+  }
+
+  private notifySuccessfulSignIn(user: UserDocument, mfaUsed: boolean): void {
+    this.domainEventPublisher.publish(DomainEventName.UserLoggedIn, {
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        name: user.name ?? null,
+      },
+      mfaUsed,
+    });
   }
 
   private assertPasswordPolicy(password: string): void {

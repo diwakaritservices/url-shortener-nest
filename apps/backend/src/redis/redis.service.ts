@@ -104,6 +104,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  getClient(): RedisClientType | null {
+    return this.client.isOpen ? this.client : null;
+  }
+
+  isConnected(): boolean {
+    return this.client.isOpen;
+  }
+
   private getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'Unknown Redis error';
   }

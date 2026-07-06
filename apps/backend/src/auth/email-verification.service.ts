@@ -9,7 +9,8 @@ import type { VerificationResendStatus } from '@url-shortener/shared';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'node:crypto';
 import { RedisService } from '../redis/redis.service';
-import { MailService } from '../mail/mail.service';
+import { DomainEventName } from '../notifications/domain-event.constants';
+import { DomainEventPublisher } from '../notifications/domain-event.publisher';
 import type { UserDocument } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 
@@ -24,7 +25,7 @@ export class EmailVerificationService {
   constructor(
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
-    private readonly mailService: MailService,
+    private readonly domainEventPublisher: DomainEventPublisher,
     private readonly usersService: UsersService,
   ) {}
 
@@ -48,7 +49,10 @@ export class EmailVerificationService {
     );
     await this.redisService.del(this.buildAttemptsKey(user._id.toString()));
 
-    await this.mailService.sendVerificationOtp(user.email, otp);
+    this.domainEventPublisher.publish(DomainEventName.VerificationOtpRequested, {
+      email: user.email,
+      otp,
+    });
     await this.setResendCooldown(user._id.toString());
   }
 

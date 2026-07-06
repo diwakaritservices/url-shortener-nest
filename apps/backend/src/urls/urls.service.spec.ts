@@ -4,6 +4,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { RedisService } from '../redis/redis.service';
+import { DomainEventPublisher } from '../notifications/domain-event.publisher';
 import { ShortUrl } from './schemas/short-url.schema';
 import { createShortIdGenerator } from './short-id-generator';
 import { UrlsService } from './urls.service';
@@ -64,6 +65,12 @@ describe('UrlsService', () => {
         {
           provide: RedisService,
           useValue: redisService,
+        },
+        {
+          provide: DomainEventPublisher,
+          useValue: {
+            publish: jest.fn(),
+          },
         },
         {
           provide: ConfigService,

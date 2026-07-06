@@ -10,6 +10,8 @@ import type {
   ShortUrlResponse,
 } from '@url-shortener/shared';
 import { Model, Types } from 'mongoose';
+import { DomainEventName } from '../notifications/domain-event.constants';
+import { DomainEventPublisher } from '../notifications/domain-event.publisher';
 import { RedisService } from '../redis/redis.service';
 import { CreateUrlDto } from './dto/create-url.dto';
 import { ShortUrl, ShortUrlDocument } from './schemas/short-url.schema';
@@ -40,6 +42,7 @@ export class UrlsService {
     @InjectModel(ShortUrl.name)
     private readonly shortUrlModel: Model<ShortUrlDocument>,
     private readonly redisService: RedisService,
+    private readonly domainEventPublisher: DomainEventPublisher,
     configService: ConfigService,
   ) {
     this.shortUrlCacheTtlSeconds =
@@ -99,7 +102,17 @@ export class UrlsService {
         ownerId: new Types.ObjectId(ownerId),
       });
 
-      return this.toResponse(shortUrl);
+      const response = this.toResponse(shortUrl);
+
+      this.domainEventPublisher.publish(DomainEventName.UrlShortened, {
+        ownerId,
+        fullUrl: createUrlDto.fullUrl,
+        shortId,
+        publicShortUrl: this.buildPublicShortUrl(shortId),
+        customShortId: Boolean(createUrlDto.shortId?.trim()),
+      });
+
+      return response;
     } catch (error) {
       if (this.isDuplicateKeyError(error)) {
         await this.throwDuplicateCreateError(

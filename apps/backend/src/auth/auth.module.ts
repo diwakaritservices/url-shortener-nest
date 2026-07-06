@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { MailModule } from '../mail/mail.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { RedisModule } from '../redis/redis.module';
 import { UrlsModule } from '../urls/urls.module';
 import { UsersModule } from '../users/users.module';
@@ -21,6 +22,7 @@ import { IsStrongPasswordConstraint } from './validators/password-policy.validat
     UsersModule,
     RedisModule,
     MailModule,
+    NotificationsModule,
     forwardRef(() => UrlsModule),
   ],
   controllers: [AuthController],
