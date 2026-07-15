@@ -46,7 +46,7 @@ moklay is a full-stack URL shortener with email/password auth, Cloudflare Turnst
 Start MongoDB and Redis from the repo root. The dev compose file exposes MongoDB on `27017` and Redis on `8765` for host-based app development.
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d mongodb redis
+docker compose -f docker-compose.dev.yml up -d url-shortener-mongodb url-shortener-redis
 ```
 
 Copy local env templates if you have not already:
@@ -182,7 +182,7 @@ npm run build --workspace=@url-shortener/frontend
 Docker:
 
 ```bash
-docker compose --env-file .env.docker.example -f docker-compose.dev.yml build backend frontend
+docker compose --env-file .env.docker.example -f docker-compose.dev.yml build url-shortener-backend url-shortener-frontend
 docker compose --env-file .env.docker.example -f docker-compose.dev.yml up -d
 docker compose --env-file .env.docker.example -f docker-compose.dev.yml ps
 docker compose --env-file .env.docker.example -f docker-compose.prod.yml config

@@ -1,5 +1,7 @@
+name: url-shortener-nest
+
 services:
-  mongodb:
+  url-shortener-mongodb:
     image: mongo:latest
     restart: unless-stopped
     volumes:
@@ -12,7 +14,7 @@ services:
       retries: 5
       start_period: 20s
 
-  redis:
+  url-shortener-redis:
     image: redis:latest
     restart: unless-stopped
     volumes:
@@ -23,14 +25,14 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  url-shortener-backend:
     image: ${BACKEND_IMAGE:-ghcr.io/abhidiwakar/url-shortener-nest-backend:latest}
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3000
-      MONGODB_URI: mongodb://mongodb:27017/url-shortener
-      REDIS_URL: redis://redis:6379
+      MONGODB_URI: mongodb://url-shortener-mongodb:27017/url-shortener
+      REDIS_URL: redis://url-shortener-redis:6379
       SHORT_URL_CACHE_TTL_SECONDS: ${SHORT_URL_CACHE_TTL_SECONDS:-43200}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
@@ -64,18 +66,18 @@ services:
     expose:
       - "3000"
     depends_on:
-      mongodb:
+      url-shortener-mongodb:
         condition: service_healthy
-      redis:
+      url-shortener-redis:
         condition: service_healthy
 
-  frontend:
+  url-shortener-frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/abhidiwakar/url-shortener-nest-frontend:latest}
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-8080}:80"
     depends_on:
-      - backend
+      - url-shortener-backend
 
 volumes:
   mongodb-data:
